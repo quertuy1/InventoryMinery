@@ -14,7 +14,7 @@ public class ToolItem
     public string fechaHora;
     public string fechaPrestamo;
     public string fechaDevolucion;
-    public string uniqueId; // NUEVO: ID único para cada préstamo
+    public string uniqueId;
 }
 
 [System.Serializable]
@@ -33,7 +33,7 @@ public class ToolDatabase
 public class HerramientasManager : MonoBehaviour
 {
     [Header("UI")]
-    public Transform content;             // ScrollView -> Viewport -> Content
+    public Transform content;
     [Header("Contenedores de listas")]
     public Transform contentPrestados;
     public Transform contentDevueltos;
@@ -41,12 +41,13 @@ public class HerramientasManager : MonoBehaviour
     public GameObject panelPrestadas;
     public GameObject panelDevueltas;
 
-    public GameObject itemCardPrefab;     // Prefab de la tarjeta (TextNombre, TextID, DropdownEstado)
-    public TMP_InputField inputID;        // Input para ID
-    public TMP_InputField inputNombre;    // Input para nombre
+    public GameObject itemCardPrefab;
+    public TMP_InputField inputID;
+    public TMP_InputField inputNombre;
 
     private string filePath;
     private ToolDatabase db = new ToolDatabase();
+    private InventarioManager inventarioManager; // Para conectar con inventario
 
     void Awake()
     {
@@ -57,9 +58,18 @@ public class HerramientasManager : MonoBehaviour
     {
         LoadDatabase();
         ShowAll();
-
-        // Actualizar los tiempos cada 60 segundos
         InvokeRepeating("ActualizarTiempos", 60f, 60f);
+
+        // Buscar el InventarioManager persistente
+        inventarioManager = FindFirstObjectByType<InventarioManager>();
+        if (inventarioManager == null)
+        {
+            Debug.LogWarning("⚠️ InventarioManager no encontrado - Los préstamos no verificarán inventario");
+        }
+        else
+        {
+            Debug.Log("✅ InventarioManager encontrado y conectado");
+        }
     }
 
     // -------- Cargar y guardar --------
@@ -146,11 +156,10 @@ public class HerramientasManager : MonoBehaviour
             item.fechaDevolucion = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
             item.fechaHora = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
 
-            // NUEVO: Devolver al inventario
-            InventarioManager inventario = FindObjectOfType<InventarioManager>();
-            if (inventario != null)
+            // Devolver al inventario
+            if (inventarioManager != null)
             {
-                inventario.ActualizarCantidad(item.nombre, 1); // Sumar 1
+                inventarioManager.ActualizarCantidad(item.nombre, 1);
                 Debug.Log($"✅ {item.nombre} devuelta al inventario");
             }
 
@@ -167,35 +176,29 @@ public class HerramientasManager : MonoBehaviour
     {
         GameObject card = Instantiate(itemCardPrefab, parent);
 
-        // Si el item no tiene uniqueId (datos antiguos), generarlo
         if (string.IsNullOrEmpty(item.uniqueId))
         {
             item.uniqueId = System.Guid.NewGuid().ToString();
-            SaveDatabase(); // Guardar el nuevo uniqueId
+            SaveDatabase();
         }
 
-        // DEBUG: Verificar qué datos tiene el item
         Debug.Log($"=== Creando tarjeta para {item.nombre} ===");
         Debug.Log($"ID: {id}, UniqueID: {item.uniqueId}");
         Debug.Log($"Estado: {item.estado}");
 
-        // Agregar CardData con el uniqueId
         CardData cardData = card.AddComponent<CardData>();
         cardData.InicializarTarjeta(id, item.uniqueId, this);
 
-        // Referencias a componentes - DECLARAR PRIMERO
         TMP_Text txtNombre = card.transform.Find("TextNombre")?.GetComponent<TMP_Text>();
         TMP_Text txtID = card.transform.Find("TextID")?.GetComponent<TMP_Text>();
-        TMP_Text txtTXT = card.transform.Find("TXT")?.GetComponent<TMP_Text>();
+        //TMP_Text txtTXT = card.transform.Find("TXT")?.GetComponent<TMP_Text>();
         TMP_Text txtFecha = card.transform.Find("TextFecha")?.GetComponent<TMP_Text>();
         TMP_Dropdown drop = card.transform.Find("DropdownEstado")?.GetComponent<TMP_Dropdown>();
 
-        // Asignar valores básicos
         if (txtNombre) txtNombre.text = item.nombre;
         if (txtID) txtID.text = id;
-        if (txtTXT) txtTXT.text = id; // Mostrar el ID/código
+       // if (txtTXT) txtTXT.text = id;
 
-        // Mostrar información de fecha/tiempo
         if (txtFecha)
         {
             if (item.estado == "Prestada")
@@ -208,15 +211,13 @@ public class HerramientasManager : MonoBehaviour
                 }
                 else
                 {
-                    // Para datos antiguos
                     txtFecha.text = $"Fecha: {item.fechaHora}";
                 }
 
-                // NUEVO: Mostrar disponibilidad del inventario
-                InventarioManager inventario = FindObjectOfType<InventarioManager>();
-                if (inventario != null)
+                // Mostrar disponibilidad del inventario
+                if (inventarioManager != null)
                 {
-                    int disponible = inventario.GetCantidadDisponible(item.nombre);
+                    int disponible = inventarioManager.GetCantidadDisponible(item.nombre);
                     txtFecha.text += $"\n📦 Disponibles: {disponible}";
                 }
             }
@@ -230,7 +231,6 @@ public class HerramientasManager : MonoBehaviour
                 }
                 else
                 {
-                    // Para datos antiguos
                     txtFecha.text = $"Devuelto: {item.fechaHora}";
                 }
             }
@@ -240,7 +240,6 @@ public class HerramientasManager : MonoBehaviour
             }
         }
 
-        // Configurar el dropdown
         if (drop)
         {
             if (drop.options.Count == 0)
@@ -263,7 +262,7 @@ public class HerramientasManager : MonoBehaviour
             {
                 item.estado = val == 0 ? "Prestada" : "Devuelta";
 
-                if (val == 1) // Si se marca como devuelta
+                if (val == 1)
                 {
                     item.fechaDevolucion = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
                     if (string.IsNullOrEmpty(item.fechaPrestamo))
@@ -271,23 +270,19 @@ public class HerramientasManager : MonoBehaviour
                         item.fechaPrestamo = item.fechaHora;
                     }
 
-                    // NUEVO: Devolver al inventario
-                    InventarioManager inventario = FindObjectOfType<InventarioManager>();
-                    if (inventario != null)
+                    if (inventarioManager != null)
                     {
-                        inventario.ActualizarCantidad(item.nombre, 1);
+                        inventarioManager.ActualizarCantidad(item.nombre, 1);
                     }
                 }
-                else if (val == 0) // Si se vuelve a prestar
+                else if (val == 0)
                 {
                     item.fechaPrestamo = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
                     item.fechaDevolucion = "";
 
-                    // NUEVO: Restar del inventario
-                    InventarioManager inventario = FindObjectOfType<InventarioManager>();
-                    if (inventario != null)
+                    if (inventarioManager != null)
                     {
-                        inventario.ActualizarCantidad(item.nombre, -1);
+                        inventarioManager.ActualizarCantidad(item.nombre, -1);
                     }
                 }
 
@@ -297,13 +292,11 @@ public class HerramientasManager : MonoBehaviour
             });
         }
 
-        // Ocultar los campos fechaPrestamo y fechaDevolucion si existen
         GameObject fechaPrestamoObj = card.transform.Find("fechaPrestamo")?.gameObject;
         GameObject fechaDevolucionObj = card.transform.Find("fechaDevolucion")?.gameObject;
         if (fechaPrestamoObj) fechaPrestamoObj.SetActive(false);
         if (fechaDevolucionObj) fechaDevolucionObj.SetActive(false);
 
-        // Mostrar/ocultar el botón según el estado
         Button btnSaldar = card.transform.Find("BotonSaldar")?.GetComponent<Button>();
         if (btnSaldar)
         {
@@ -317,33 +310,37 @@ public class HerramientasManager : MonoBehaviour
         string id = inputID.text.Trim();
         string nombre = inputNombre.text.Trim();
 
+        Debug.Log($"=== INTENTANDO PRESTAR ===");
+        Debug.Log($"ID: {id}, Nombre: {nombre}");
+
         if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(nombre))
         {
             Debug.LogWarning("ID o nombre vacío.");
             return;
         }
 
-        // NUEVO: Buscar el InventarioManager
-        InventarioManager inventario = FindObjectOfType<InventarioManager>();
-
-        if (inventario != null)
+        // Verificar inventario
+        if (inventarioManager != null)
         {
-            // Verificar si existe en inventario
-            int disponible = inventario.GetCantidadDisponible(nombre);
+            Debug.Log("✅ InventarioManager encontrado");
+
+            int disponible = inventarioManager.GetCantidadDisponible(nombre);
+            Debug.Log($"Cantidad disponible de {nombre}: {disponible}");
 
             if (disponible <= 0)
             {
                 Debug.LogWarning($"❌ No hay {nombre} disponible en el inventario");
-                // Aquí puedes mostrar un mensaje en UI
-                return; // No permitir el préstamo
+                return;
             }
 
-            // Si hay disponible, actualizar inventario (restar 1)
-            inventario.ActualizarCantidad(nombre, -1);
+            inventarioManager.ActualizarCantidad(nombre, -1);
             Debug.Log($"✅ Prestando {nombre}. Quedan {disponible - 1} disponibles");
         }
+        else
+        {
+            Debug.LogWarning("❌ No se encontró InventarioManager - El préstamo continuará sin verificación");
+        }
 
-        // Tu código existente para crear el préstamo
         ToolItem t = new ToolItem
         {
             nombre = nombre,
@@ -367,19 +364,22 @@ public class HerramientasManager : MonoBehaviour
 
         inputID.text = "";
         inputNombre.text = "";
+
+        Debug.Log($"=== PRÉSTAMO COMPLETADO ===");
     }
 
     // -------- Actualizar tiempos automáticamente --------
     void ActualizarTiempos()
     {
-        // Solo actualizar si hay herramientas prestadas
         bool hayPrestadas = db.entries.Any(e => e.items.Any(i => i.estado == "Prestada"));
         if (hayPrestadas)
         {
-            ShowAll(); // Esto refrescará los tiempos mostrados
+            ShowAll();
             Debug.Log("⏱️ Tiempos actualizados");
         }
     }
+
+    // -------- Borrar to
 
     // -------- Borrar todo --------
     public void ClearAndDeleteFile()
