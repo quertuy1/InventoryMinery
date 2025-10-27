@@ -1,52 +1,52 @@
-﻿using UnityEngine;
-using System;
+﻿using System;
 
+using UnityEngine;
 
 public class MachineWorkController : MonoBehaviour
 {
-    [Header("Datos de la máquina")]
-    public string nombreMaquina;
-    public float litrosConsumidos;
-    public float oroGenerado;
-    public float horasTrabajadas;
-    public float costoCombustible;
+    public MachineTimer timer; // asignar en inspector (si el componente está en el mismo GO, arrástralo)
 
-    private DateTime fechaInicio;
-    private DateTime fechaFin;
-    private bool trabajando = false;
-
-    public void IniciarTrabajo()
+    private void Reset()
     {
-        if (!trabajando)
-        {
-            trabajando = true;
-            fechaInicio = DateTime.Now;
-            Debug.Log($"✅ {nombreMaquina} inició trabajo a las {fechaInicio}");
-        }
+        if (timer == null) timer = GetComponent<MachineTimer>();
     }
 
-    public void FinalizarTrabajo()
+    public void BotonIniciar()
     {
-        if (trabajando)
+        if (timer == null) { Debug.LogError("MachineWorkController: timer no asignado"); return; }
+        timer.IniciarTrabajo();
+    }
+
+    public void BotonFinalizar()
+    {
+        if (timer == null) { Debug.LogError("MachineWorkController: timer no asignado"); return; }
+
+        // take snapshot before finalizing
+        float horas = timer.GetHorasTrabajadas();
+        float litros = timer.GetLitrosConsumidos();
+        float oro = timer.GetOroGenerado();
+        // finalize the timer
+        timer.FinalizarTrabajo();
+
+        // compute fuel cost via FuelCalculator
+        float costo = 0f;
+        var fc = FindObjectOfType<FuelCalculator>();
+        if (fc != null) costo = fc.CalcularCostoPorLitros(litros);
+
+        RegistroTrabajo reg = new RegistroTrabajo
         {
-            trabajando = false;
-            fechaFin = DateTime.Now;
+            id = Guid.NewGuid().ToString(),
+            nombreMaquina = timer.nombreMaquina,
+            horasTrabajadas = horas,
+            litrosConsumidos = litros,
+            oroGenerado = oro,
+            costoCombustible = costo,
+            fechaInicio = DateTime.Now.ToString("s"),
+            fechaFin = DateTime.Now.ToString("s")
+        };
 
-            RegistroTrabajo registro = new RegistroTrabajo
-            {
-                id = Guid.NewGuid().ToString(),
-                nombreMaquina = nombreMaquina,
-                horasTrabajadas = horasTrabajadas,
-                litrosConsumidos = litrosConsumidos,
-                oroGenerado = oroGenerado,
-                costoCombustible = costoCombustible,
-                fechaInicio = fechaInicio.ToString("s"),
-                fechaFin = fechaFin.ToString("s")
-            };
-
-            MachineManager.Instance.RegistrarTrabajo(registro);
-
-            Debug.Log($"🧾 Registro finalizado para {nombreMaquina}: {horasTrabajadas}h, {litrosConsumidos}L, {oroGenerado} oro");
-        }
+        MachineManager.Instance.RegistrarTrabajo(reg);
+        // persist machine storage (fuel changed)
+        if (MachineStorage.Instance != null) MachineStorage.Instance.GuardarMaquinas();
     }
 }

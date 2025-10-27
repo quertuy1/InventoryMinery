@@ -2,140 +2,136 @@
 using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
+using System.IO;
 using System;
 
-
+/// <summary>
+/// Muestra la lista de registros guardados en MachineManager y permite exportarlos a JSON.
+/// Requiere:
+/// - contenedorRegistros: Content del ScrollView
+/// - prefabRegistro: prefab con varios TMP_Text (nombres esperados: Nombre, Horas, Litros, Oro, Costo, FechaInicio, FechaFin)
+/// - botonExportar: (opcional) botón que dispara ExportarRegistros()
+/// - botonInicio y botonFin: botones para iniciar y terminar el registro manualmente
+/// </summary>
 public class RegistroUI : MonoBehaviour
 {
-    [Header("Referencias UI")]
+    [Header("UI")]
     public Transform contenedorRegistros;
     public GameObject prefabRegistro;
-    public Button botonRegistrar;
-    public Button botonActualizar;
-    public TMP_Dropdown dropdownMaquinas; // 👈 Aquí eliges la máquina a registrar
+    public Button botonExportar;
+    public Button botonInicio;
+    public Button botonFin;
 
-    private FuelCalculator fuelCalc;
-    private MachineManager machineManager;
-    private List<MachineTimer> maquinasDisponibles = new List<MachineTimer>();
+    private MachineManager manager;
 
     private void Start()
     {
-        fuelCalc = FindObjectOfType<FuelCalculator>();
-        machineManager = MachineManager.Instance;
+        manager = MachineManager.Instance;
 
-        ActualizarListaMaquinas();
-
-        if (botonRegistrar != null)
-            botonRegistrar.onClick.AddListener(RegistrarDesdeSeleccion);
-
-        if (botonActualizar != null)
-            botonActualizar.onClick.AddListener(ActualizarLista);
-    }
-
-    // 🔄 Carga todas las máquinas activas en el Dropdown
-    private void ActualizarListaMaquinas()
-    {
-        maquinasDisponibles.Clear();
-        dropdownMaquinas.ClearOptions();
-
-        MachineTimer[] maquinas = FindObjectsOfType<MachineTimer>();
-        foreach (var maquina in maquinas)
+        if (manager == null)
         {
-            maquinasDisponibles.Add(maquina);
-        }
-
-        List<string> nombres = new List<string>();
-        foreach (var maquina in maquinasDisponibles)
-        {
-            nombres.Add(maquina.nombreMaquina);
-        }
-
-        if (nombres.Count == 0)
-        {
-            nombres.Add("No hay máquinas activas");
-        }
-
-        dropdownMaquinas.AddOptions(nombres);
-    }
-
-    // 🧾 Registra los datos de la máquina seleccionada
-    public void RegistrarDesdeSeleccion()
-    {
-        if (maquinasDisponibles.Count == 0)
-        {
-            Debug.LogWarning("⚠️ No hay máquinas disponibles para registrar.");
+            Debug.LogError("RegistroUI: MachineManager.Instance es null.");
             return;
         }
 
-        if (fuelCalc == null || machineManager == null)
-        {
-            Debug.LogWarning("⚠️ Faltan referencias en RegistroUI.");
-            return;
-        }
+        if (botonExportar != null)
+            botonExportar.onClick.AddListener(ExportarRegistros);
 
-        int indice = dropdownMaquinas.value;
-        if (indice < 0 || indice >= maquinasDisponibles.Count)
-        {
-            Debug.LogWarning("⚠️ Selección inválida en el menú desplegable.");
-            return;
-        }
+        if (botonInicio != null)
+            botonInicio.onClick.AddListener(IniciarRegistro);
 
-        MachineTimer maquina = maquinasDisponibles[indice];
-        if (maquina == null)
-        {
-            Debug.LogWarning("⚠️ Máquina seleccionada no válida.");
-            return;
-        }
-
-        float horas = maquina.GetHorasTrabajadas();
-        float litrosConsumidos = maquina.GetLitrosConsumidos();
-        float costoCombustible = fuelCalc.CalcularCostoPorLitros(litrosConsumidos);
-        float oroGenerado = maquina.GetOroGenerado();
-
-        RegistroTrabajo registro = new RegistroTrabajo
-        {
-            id = Guid.NewGuid().ToString(),
-            nombreMaquina = maquina.nombreMaquina,
-            horasTrabajadas = horas,
-            litrosConsumidos = litrosConsumidos,
-            oroGenerado = oroGenerado,
-            costoCombustible = costoCombustible,
-            fechaInicio = DateTime.Now.ToString("s"),
-            fechaFin = DateTime.Now.ToString("s")
-        };
-
-        machineManager.RegistrarTrabajo(registro);
-
-        Debug.Log($"🧾 Registro para {maquina.nombreMaquina}: {horas:F2}h | {litrosConsumidos:F2}L | {oroGenerado:F2} oro | ${costoCombustible:F2}");
+        if (botonFin != null)
+            botonFin.onClick.AddListener(TerminarRegistro);
 
         ActualizarLista();
     }
 
-    // 🔁 Actualiza visualmente la lista de registros existentes
     public void ActualizarLista()
     {
-        if (machineManager == null) return;
-
-        foreach (Transform child in contenedorRegistros)
-            Destroy(child.gameObject);
-
-        List<RegistroTrabajo> registros = machineManager.ObtenerRegistros();
-
-        foreach (var registro in registros)
+        if (contenedorRegistros == null || prefabRegistro == null)
         {
-            GameObject nuevoItem = Instantiate(prefabRegistro, contenedorRegistros);
-            TMP_Text[] textos = nuevoItem.GetComponentsInChildren<TMP_Text>();
+            Debug.LogWarning("RegistroUI: contenedorRegistros o prefabRegistro no asignado.");
+            return;
+        }
 
-            if (textos.Length >= 7)
+        // limpiar registros anteriores
+        for (int i = contenedorRegistros.childCount - 1; i >= 0; i--)
+            Destroy(contenedorRegistros.GetChild(i).gameObject);
+
+        List<RegistroTrabajo> regs = manager.ObtenerRegistros();
+        if (regs == null || regs.Count == 0)
+        {
+            Debug.Log("RegistroUI: no hay registros para mostrar.");
+            return;
+        }
+
+        foreach (var r in regs)
+        {
+            GameObject go = Instantiate(prefabRegistro, contenedorRegistros);
+            TMP_Text[] textos = go.GetComponentsInChildren<TMP_Text>(true);
+
+            if (textos.Length == 0)
             {
-                textos[0].text = registro.nombreMaquina;
-                textos[1].text = $"{registro.horasTrabajadas:F2} h";
-                textos[2].text = $"{registro.litrosConsumidos:F2} L";
-                textos[3].text = $"{registro.oroGenerado:F2} oro";
-                textos[4].text = $"${registro.costoCombustible:F2}";
-                textos[5].text = $"Inicio: {registro.fechaInicio}";
-                textos[6].text = $"Fin: {registro.fechaFin}";
+                Debug.LogWarning($"RegistroUI: el prefab {prefabRegistro.name} no contiene TMP_Text.");
+                continue;
+            }
+
+            // asignación por nombre del objeto
+            foreach (var t in textos)
+            {
+                switch (t.name)
+                {
+                    case "Nombre": t.text = r.nombreMaquina; break;
+                    case "Horas": t.text = $"{r.horasTrabajadas:F2} h"; break;
+                    case "Litros": t.text = $"{r.litrosConsumidos:F2} L"; break;
+                    case "Oro": t.text = $"{r.oroGenerado:F2} oro"; break;
+                    case "Costo": t.text = $"${r.costoCombustible:F2}"; break;
+                    case "FechaInicio": t.text = r.fechaInicio; break;
+                    case "FechaFin": t.text = r.fechaFin; break;
+                }
             }
         }
     }
+
+    public void ExportarRegistros()
+    {
+        var regs = manager.ObtenerRegistros();
+        if (regs == null || regs.Count == 0)
+        {
+            Debug.Log("RegistroUI: no hay registros para exportar.");
+            return;
+        }
+
+        try
+        {
+            string folder = Application.persistentDataPath;
+            string fileName = $"registros_{DateTime.Now:yyyyMMdd_HHmmss}.json";
+            string path = Path.Combine(folder, fileName);
+
+            var wrapper = new Wrapper { lista = regs };
+            string json = JsonUtility.ToJson(wrapper, true);
+
+            File.WriteAllText(path, json);
+            Debug.Log($"✅ Registros exportados correctamente a: {path}");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("❌ Error exportando registros: " + ex.Message);
+        }
+    }
+
+    private void IniciarRegistro()
+    {
+        manager.IniciarNuevoRegistro();
+        ActualizarLista();
+    }
+
+    private void TerminarRegistro()
+    {
+        manager.TerminarRegistroActual();
+        ActualizarLista();
+    }
+
+    [Serializable]
+    private class Wrapper { public List<RegistroTrabajo> lista; }
 }

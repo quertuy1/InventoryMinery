@@ -3,15 +3,18 @@ using TMPro;
 
 public class PriceUIController : MonoBehaviour
 {
-    public TMP_Text fuelText;
-    public TMP_Text goldText;
-    public TMP_Text goldPerHourText;
+    public TMP_InputField inputOro;
+    public TMP_InputField inputCombustible;
 
-    void Update()
+    private void Start()
     {
-        if (PriceManager.Instance == null) return;
-        fuelText.text = $"Combustible: ${PriceManager.Instance.GetFuelPrice():F2}/gal";
-        goldText.text = $"Oro: ${PriceManager.Instance.GetGoldPrice():F2}/u";
-        goldPerHourText.text = $"Prod: {PriceManager.Instance.GetGoldPerHour():F2} u/h";
+        inputOro.text = PriceManager.Instance.precios.precioOro.ToString();
+        inputCombustible.text = PriceManager.Instance.precios.precioCombustible.ToString();
+    }
+
+    public void ActualizarPrecios()
+    {
+        float.TryParse(inputOro.text, out PriceManager.Instance.precios.precioOro);
+        float.TryParse(inputCombustible.text, out PriceManager.Instance.precios.precioCombustible);
     }
 }

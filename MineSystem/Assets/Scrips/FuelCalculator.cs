@@ -2,19 +2,18 @@
 
 public class FuelCalculator : MonoBehaviour
 {
-    // Convierte litros a galones y multiplica por precio actual del galón
+    // calcula costo a partir de litros (usa precio por galón o por litro según PriceManager)
+    // asumimos precio en la misma unidad (precio por litro)
     public float CalcularCostoPorLitros(float litros)
     {
         if (PriceManager.Instance == null) return 0f;
-        float precioPorGalon = PriceManager.Instance.GetFuelPrice();
-        float galones = litros / 3.785411784f; // conversión litros -> galones (US)
-        return galones * precioPorGalon;
+        return litros * PriceManager.Instance.GetFuelPrice();
     }
 
     public float CalcularCostoPorGalones(float galones)
     {
-        if (PriceManager.Instance == null) return 0f;
-        float precioPorGalon = PriceManager.Instance.GetFuelPrice();
-        return galones * precioPorGalon;
+        // si usas galones convierte a litros si PriceManager está en litros; aquí asumimos precio por litro
+        float litros = galones * 3.785411784f;
+        return CalcularCostoPorLitros(litros);
     }
 }

@@ -1,120 +1,87 @@
-﻿using UnityEngine;
-using UnityEngine.UI;
+﻿using System.Collections.Generic;
+using UnityEngine;
 using TMPro;
-using System.Collections.Generic;
+using UnityEngine.UI;
+
 
 public class MachineUI : MonoBehaviour
 {
-    [Header("Referencias UI")]
-    [SerializeField] private TMP_InputField nombreInput;
-    [SerializeField] private TMP_InputField horasInput;
-    [SerializeField] private TMP_InputField oroInput;
-    [SerializeField] private TMP_InputField combustibleInput;
-    [SerializeField] private TMP_Dropdown listaMaquinasDropdown;
+    [Header("Crear máquina")]
+    public TMP_InputField inputNombre;
+    public TMP_InputField inputLitrosPorHora;
+    public TMP_InputField inputOroPorHora;
+    public TMP_InputField inputCombustibleInicial;
+    public Button botonCrear;
 
-    [Header("Botones")]
-    [SerializeField] private Button btnGuardar;
-    [SerializeField] private Button btnMostrar;
-    [SerializeField] private Button btnEliminar;
-
-    [Header("Texto de información")]
-    [SerializeField] private TMP_Text detallesTexto;
-
-    private MachineStorage machineStorage;
+    [Header("Gestión")]
+    public TMP_Dropdown dropdownMaquinas;
+    public TMP_InputField inputNuevoCombustible;
+    public Button botonActualizarCombustible;
+    public Button botonEliminar;
+    public TextMeshProUGUI textoFeedback;
 
     private void Start()
     {
-        machineStorage = MachineStorage.Instance;
-
-        if (btnGuardar != null)
-            btnGuardar.onClick.AddListener(GuardarMaquina);
-
-        if (btnMostrar != null)
-            btnMostrar.onClick.AddListener(MostrarDetalles);
-
-        if (btnEliminar != null)
-            btnEliminar.onClick.AddListener(EliminarMaquina);
-
-        ActualizarListaDropdown();
+        botonCrear.onClick.AddListener(OnCrearMaquina);
+        botonActualizarCombustible.onClick.AddListener(OnActualizarCombustible);
+        botonEliminar.onClick.AddListener(OnEliminarMaquina);
+        ActualizarDropdown();
     }
 
-    private void GuardarMaquina()
+    public void ActualizarDropdown()
     {
-        string nombre = nombreInput.text;
-        if (string.IsNullOrEmpty(nombre))
-        {
-            detallesTexto.text = "⚠️ Ingresa un nombre de máquina.";
-            return;
-        }
-
-        float horas = float.TryParse(horasInput.text, out float h) ? h : 0f;
-        float oro = float.TryParse(oroInput.text, out float o) ? o : 0f;
-        float combustible = float.TryParse(combustibleInput.text, out float c) ? c : 0f;
-
-        MachineData nueva = new MachineData(nombre, horas, oro, combustible);
-        machineStorage.GuardarMaquina(nueva);
-
-        detallesTexto.text = $"✅ Máquina '{nombre}' guardada correctamente.";
-        ActualizarListaDropdown();
+        dropdownMaquinas.ClearOptions();
+        var list = MachineStorage.Instance != null ? MachineStorage.Instance.ObtenerMaquinasGuardadas() : new List<MachineData>();
+        List<string> names = new List<string>();
+        foreach (var m in list) names.Add(m.nombreMaquina);
+        if (names.Count == 0) names.Add("(sin máquinas)");
+        dropdownMaquinas.AddOptions(names);
+        MostrarDetallesSeleccionada();
     }
 
-    private void MostrarDetalles()
+    public void OnCrearMaquina()
     {
-        if (listaMaquinasDropdown.options.Count == 0)
-        {
-            detallesTexto.text = "⚠️ No hay máquinas guardadas.";
-            return;
-        }
+        if (MachineStorage.Instance == null) { Mostrar("No hay MachineStorage"); return; }
+        string nombre = inputNombre.text.Trim();
+        if (string.IsNullOrEmpty(nombre)) { Mostrar("Nombre inválido"); return; }
+        if (!float.TryParse(inputLitrosPorHora.text, out float litros)) { Mostrar("Litros inválido"); return; }
+        if (!float.TryParse(inputOroPorHora.text, out float oro)) { Mostrar("Oro inválido"); return; }
+        if (!float.TryParse(inputCombustibleInicial.text, out float comb)) comb = 100f;
 
-        string seleccion = listaMaquinasDropdown.options[listaMaquinasDropdown.value].text;
-        MachineData maquina = machineStorage.ObtenerMaquina(seleccion);
-
-        if (maquina != null)
-        {
-            detallesTexto.text =
-                $"🧭 Nombre: {maquina.nombreMaquina}\n" +
-                $"⏱ Horas: {maquina.horasTrabajadas}\n" +
-                $"💰 Oro: {maquina.oroGenerado}\n" +
-                $"⛽ Combustible: {maquina.combustibleActual}";
-        }
-        else
-        {
-            detallesTexto.text = $"⚠️ No se encontró la máquina '{seleccion}'.";
-        }
+        var created = MachineStorage.Instance.CrearNuevaMaquina(nombre, litros, oro, comb);
+        if (created != null) { Mostrar($"Máquina '{nombre}' creada"); ActualizarDropdown(); }
+        else Mostrar($"No se creó. Nombre ya existe?");
     }
 
-    private void EliminarMaquina()
+    public void OnActualizarCombustible()
     {
-        if (listaMaquinasDropdown.options.Count == 0)
-        {
-            detallesTexto.text = "⚠️ No hay máquinas para eliminar.";
-            return;
-        }
-
-        string seleccion = listaMaquinasDropdown.options[listaMaquinasDropdown.value].text;
-        machineStorage.EliminarMaquina(seleccion);
-
-        detallesTexto.text = $"🗑️ Máquina '{seleccion}' eliminada.";
-        ActualizarListaDropdown();
+        if (MachineStorage.Instance == null) { Mostrar("No hay MachineStorage"); return; }
+        if (dropdownMaquinas.options.Count == 0) { Mostrar("No hay máquinas"); return; }
+        string nombre = dropdownMaquinas.options[dropdownMaquinas.value].text;
+        if (!float.TryParse(inputNuevoCombustible.text, out float nuevo)) { Mostrar("Combustible inválido"); return; }
+        bool ok = MachineStorage.Instance.ActualizarCombustible(nombre, nuevo);
+        if (ok) { Mostrar($"Combustible de '{nombre}' actualizado"); ActualizarDropdown(); }
+        else Mostrar("Error actualizando combustible");
     }
 
-    private void ActualizarListaDropdown()
+    public void OnEliminarMaquina()
     {
-        listaMaquinasDropdown.ClearOptions();
-
-        List<MachineData> maquinas = machineStorage.ObtenerTodas();
-        List<string> nombres = new List<string>();
-
-        foreach (var maquina in maquinas)
-        {
-            nombres.Add(maquina.nombreMaquina);
-        }
-
-        listaMaquinasDropdown.AddOptions(nombres);
+        if (MachineStorage.Instance == null) { Mostrar("No hay MachineStorage"); return; }
+        if (dropdownMaquinas.options.Count == 0) { Mostrar("No hay máquinas"); return; }
+        string nombre = dropdownMaquinas.options[dropdownMaquinas.value].text;
+        bool ok = MachineStorage.Instance.EliminarMaquina(nombre);
+        if (ok) { Mostrar($"Máquina '{nombre}' eliminada"); ActualizarDropdown(); }
+        else Mostrar("Error al eliminar");
     }
-    public void update()
+
+    private void Mostrar(string msg)
     {
-        ActualizarListaDropdown();
+        if (textoFeedback != null) textoFeedback.text = msg;
+        Debug.Log(msg);
+    }
+
+    public void MostrarDetallesSeleccionada()
+    {
+        // optional: implement to show details in UI; left simple
     }
 }
-

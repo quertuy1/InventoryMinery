@@ -1,44 +1,49 @@
-﻿
-using UnityEngine;
+﻿using UnityEngine;
+using System;
+
+[Serializable]
+public class PriceData
+{
+    public float precioOro = 100f;
+    public float precioCombustible = 10f;
+    // opcional: puedes agregar más campos aquí
+}
 
 public class PriceManager : MonoBehaviour
 {
     public static PriceManager Instance { get; private set; }
 
-    [Header("Precios globales")]
-    [Tooltip("Precio del combustible por galón")]
-    public float fuelPricePerGallon = 3.5f;
+    public PriceData precios = new PriceData();
 
-    [Tooltip("Precio del oro por unidad (ej: gramo)")]
-    public float goldPricePerUnit = 150000f;
-
-    [Tooltip("Oro producido por hora por defecto (unidad/ hora)")]
-    public float goldPerHour = 3.5f;
+    // Valor adicional: oro generado por hora (por máquina u operación)
+    [Header("Valores dinámicos")]
+    public float oroPorHora = 1f;       // usado por algunos UIs o calculadores
+    public float combustiblePorUnidad = 1f; // si necesitas alguna unidad extra
 
     private void Awake()
     {
-        if (Instance != null && Instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
+        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
         DontDestroyOnLoad(gameObject);
     }
 
-    // Getters
-    public float GetFuelPrice() => fuelPricePerGallon;
-    public float GetGoldPrice() => goldPricePerUnit;
-    public float GetGoldPerHour() => goldPerHour;
+    // --- Fuel price (precio por litro, por ejemplo) ---
+    public float GetFuelPrice() => precios.precioCombustible;
+    public void SetFuelPrice(float p) => precios.precioCombustible = p;
 
-    // Setters (para UI)
-    public void SetFuelPrice(float v) { fuelPricePerGallon = v; Debug.Log($"PriceManager: fuelPricePerGallon = {v}"); }
-    public void SetGoldPrice(float v) { goldPricePerUnit = v; Debug.Log($"PriceManager: goldPricePerUnit = {v}"); }
-    public void SetGoldPerHour(float v) { goldPerHour = v; Debug.Log($"PriceManager: goldPerHour = {v}"); }
+    // aliases para compatibilidad con nombres anteriores
+    public float ObtenerPrecioCombustible() => GetFuelPrice();
+    public void SetPrecioCombustible(float p) => SetFuelPrice(p);
 
-    // Alias/compatibility (si otros scripts usan otros nombres)
-    public float GetPrecioCombustible() => GetFuelPrice();
-    public void UpdateFuelPrice(float v) => SetFuelPrice(v);
-    public float GetPrecioOro() => GetGoldPrice();
-    public void UpdateGoldPrice(float v) => SetGoldPrice(v);
+    // --- Gold price (precio del oro por unidad monetaria, si aplica) ---
+    public float GetGoldPrice() => precios.precioOro;
+    public void SetGoldPrice(float p) => precios.precioOro = p;
+
+    // --- Oro por hora (valor que algunos UIs referenciaban) ---
+    public float GetGoldPerHour() => oroPorHora;
+    public void SetGoldPerHour(float v) => oroPorHora = v;
+
+    // aliases por si se usaban nombres en español
+    public float GetOroPorHora() => GetGoldPerHour();
+    public void SetOroPorHora(float v) => SetGoldPerHour(v);
 }
